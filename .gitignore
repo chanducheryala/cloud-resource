@@ -1,0 +1,8 @@
+.env
+*.log
+*.out
+*.bin
+*.exe
+*.tar.gz
+*.gz
+*.zip
