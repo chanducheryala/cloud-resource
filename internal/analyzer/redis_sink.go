@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
 	"github.com/go-redis/redis/v8"
 )
 
@@ -21,10 +22,28 @@ func (r *RedisSuggestionSink) AddSuggestion(sug Suggestion) {
 	ctx := context.Background()
 	b, _ := json.Marshal(sug)
 
-	fmt.Println("redisSuggestionSink : " , r.Client)
-	fmt.Println("suggestion : ", string(b))
-	// Ensure the key is initialized as an empty array if it does not exist
-	_, _ = r.Client.Do(ctx, "JSON.SET", r.Key, ".", "[]").Result()
+	exists, _ := r.Client.Exists(ctx, r.Key).Result()
+	if exists == 0 {
+		_, _ = r.Client.Do(ctx, "JSON.SET", r.Key, ".", "[]").Result()
+	}
+
+	fmt.Println("Adding suggestion:", string(b))
+	jsonStr, err := r.Client.Do(ctx, "JSON.GET", r.Key, ".").Result()
+	var suggestions []Suggestion
+	if err == nil && jsonStr != nil {
+		bs, ok := jsonStr.(string)
+		if ok {
+			_ = json.Unmarshal([]byte(bs), &suggestions)
+		}
+	}
+	for _, existing := range suggestions {
+		if existing.ResourceID == sug.ResourceID &&
+			existing.Action == sug.Action &&
+			existing.ResourceType == sug.ResourceType &&
+			existing.Message == sug.Message {
+			return
+		}
+	}
 	_, _ = r.Client.Do(ctx, "JSON.ARRAPPEND", r.Key, ".", string(b)).Result()
 }
 

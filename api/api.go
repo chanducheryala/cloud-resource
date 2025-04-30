@@ -135,12 +135,12 @@ func StartAPIServer(ctx context.Context, sharedResources *[]models.CloudResource
 
 	r := gin.Default()
 	
-	r.GET("/resources", getAllResources)
-	r.GET("/resources/:id", getResourceByID)
-	r.GET("/resources/:id/history", getResourceHistory)
-	r.GET("/suggestions", getSuggestions)
-	r.POST("/suggestions/clear", clearSuggestions)
-	r.GET("/status", getStatus)
+	r.GET("/api/v1/resources", getAllResources)
+	r.GET("/api/v1/resources/:id", getResourceByID)
+	r.GET("/api/v1/resources/:id/history", getResourceHistory)
+	r.GET("/api/v1/suggestions", getSuggestions)
+	r.POST("/api/v1/suggestions/clear", clearSuggestions)
+	r.GET("/api/v1/status", getStatus)
 
 	httpServer := &http.Server{
         Addr:    ":8080",
