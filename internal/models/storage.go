@@ -23,5 +23,5 @@ func (storage *Storage) GetType() string {
 }
 
 func (s *Storage) String() string {
-	return fmt.Sprintf("Storage[ID=%s, UsedGB=%.2f, CostPerGB=%.2f, LastAccessed=%d]", s.ID, s.UsedGB, s.CostPerGB, s.LastAccessed)
+	return fmt.Sprintf("Storage[ID=%s, UsedGB=%.2f, CostPerGB=%.2f, PreviousCostPerGB=%.2f, LastAccessed=%d, Owner=%s]", s.ID, s.UsedGB, s.CostPerGB, s.PreviousCostPerGB, s.LastAccessed, s.Owner)
 }

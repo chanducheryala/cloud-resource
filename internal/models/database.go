@@ -23,5 +23,5 @@ func (db *Database) GetType() string {
 }
 
 func (db *Database) String() string {
-	return fmt.Sprintf("Database[ID=%s, Connections=%d, CostPerHr=%.2f]", db.ID, db.Connections, db.CostPerHr)
+	return fmt.Sprintf("Database[ID=%s, Connections=%d, CostPerHr=%.2f, PreviousCostPerHr=%.2f, Owner=%s]", db.ID, db.Connections, db.CostPerHr, db.PreviousCostPerHr, db.Owner)
 }
