@@ -23,6 +23,19 @@ func getSuggestions(c *gin.Context) {
 	c.JSON(http.StatusOK, suggestions)
 }
 
+func clearSuggestions(c *gin.Context) {
+	if suggestionSink == nil {
+		c.JSON(500, gin.H{"error": "suggestion sink not configured"})
+		return
+	}
+	err := suggestionSink.ClearSuggestions()
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"message": "Suggestions cleared"})
+}
+
 func getStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sink": suggestionSinkType})
 }

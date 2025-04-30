@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
 	"github.com/joho/godotenv"
 )
 
@@ -28,7 +29,12 @@ var (
 )
 
 func LoadAPIConfig() {
-	_ = godotenv.Load()
+	
+	err := godotenv.Load()
+	if err != nil {
+		logger.Error("Failed to load environment variables", zap.Error(err))
+	}
+
 	redisAddr = os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
@@ -47,13 +53,11 @@ func GetLogger() *zap.Logger {
 }
 
 func setupLogger() {
-	if logger == nil {
-		l, err := zap.NewProduction()
-		if err != nil {
-			panic(err)
-		}
-		logger = l
+	l, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
 	}
+	logger = l
 }
 
 func setupRedis() {
@@ -61,13 +65,20 @@ func setupRedis() {
 		Addr: redisAddr,
 		DB:   redisDB,
 	})
+
+	ctx := context.Background()
+	_, err := redisClient.Ping(ctx).Result()
+	if err != nil {
+		logger.Error("Failed to connect to Redis", zap.Error(err))
+		return
+	}
 	logger.Info("Redis client initialized")
 }
 
 func getAllResources(c *gin.Context) {
 	resourceMutex.RLock()
 	defer resourceMutex.RUnlock()
-	logger.Info("GET /resources", zap.Int("count", len(resources)))
+	logger.Info("all resources", zap.Int("count", len(resources)))
 	c.JSON(http.StatusOK, resources)
 }
 
@@ -77,7 +88,7 @@ func getResourceByID(c *gin.Context) {
 	defer resourceMutex.RUnlock()
 	for _, r := range resources {
 		if r.GetId() == id {
-			logger.Info("GET /resources/:id", zap.String("id", id))
+			logger.Info("resource by id", zap.String("id", id))
 			c.JSON(http.StatusOK, r)
 			return
 		}
@@ -89,7 +100,7 @@ func getResourceByID(c *gin.Context) {
 func getResourceHistory(c *gin.Context) {
 	id := c.Param("id")
 	ctx := context.Background()
-	entries, err := redisClient.LRange(ctx, "resource:"+id+":history", 0, -1).Result()
+	entries, err := redisClient.LRange(ctx, "resource:"+ id +":history", 0, -1).Result()
 	if err != nil {
 		logger.Error("Redis LRange failed", zap.String("id", id), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -101,34 +112,57 @@ func getResourceHistory(c *gin.Context) {
 		json.Unmarshal([]byte(entry), &m)
 		history = append(history, m)
 	}
-	logger.Info("GET /resources/:id/history", zap.String("id", id), zap.Int("entries", len(history)))
+	logger.Info("resources history for id", zap.String("id", id), zap.Int("entries", len(history)))
 	c.JSON(http.StatusOK, history)
 }
 
-func saveResourceToRedis(res models.CloudResource) {
-	ctx := context.Background()
-	b, _ := json.Marshal(res)
-	err := redisClient.RPush(ctx, "resource:"+res.GetId()+":history", b).Err()
-	if err != nil {
-		logger.Error("Redis RPush failed", zap.String("id", res.GetId()), zap.Error(err))
+func GetRedisClient() *redis.Client {
+	if redisClient == nil {
+		setupRedis()
 	}
+	return redisClient
 }
 
-func StartAPIServer(sharedResources *[]models.CloudResource, mutex *sync.RWMutex, suggestionSink analyzer.SuggestionSink, suggestionSinkType string) {
+func StartAPIServer(ctx context.Context, sharedResources *[]models.CloudResource, suggestionSink analyzer.SuggestionSink, suggestionSinkType string) *http.Server {
 	LoadAPIConfig()
-	resources = *sharedResources
-	resourceMutex = *mutex
+	resources = *sharedResources	
 	setupLogger()
 	logger.Info("Logger initialized")
+	
 	setupRedis()
+	
 	SetSuggestionSink(suggestionSink, suggestionSinkType)
 
 	r := gin.Default()
+	
 	r.GET("/resources", getAllResources)
 	r.GET("/resources/:id", getResourceByID)
 	r.GET("/resources/:id/history", getResourceHistory)
 	r.GET("/suggestions", getSuggestions)
+	r.POST("/suggestions/clear", clearSuggestions)
 	r.GET("/status", getStatus)
-	go r.Run(":8080")
-	logger.Info("API server started")
+
+	httpServer := &http.Server{
+        Addr:    ":8080",
+        Handler: r,
+    }
+
+    go func() {
+        if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            logger.Error("API server error", zap.Error(err))
+        }
+    }()
+    logger.Info("API server started")
+
+    go func() {
+        <-ctx.Done()
+        logger.Info("Shutting down API server...")
+        shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+        defer cancel()
+        if err := httpServer.Shutdown(shutdownCtx); err != nil {
+            logger.Error("API server forced to shutdown", zap.Error(err))
+        }
+    }()
+
+    return httpServer
 }

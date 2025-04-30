@@ -1,10 +1,9 @@
 package analyzer
 
 import (
-	"context"
-	"github.com/chanducheryala/cloud-resource/internal/models"
 	"sync"
 	"time"
+	"github.com/chanducheryala/cloud-resource/internal/models"
 )
 
 type Suggestion struct {
@@ -17,6 +16,7 @@ type Suggestion struct {
 type SuggestionSink interface {
 	AddSuggestion(s Suggestion)
 	GetSuggestions() []Suggestion
+	ClearSuggestions() error
 }
 
 type InMemorySuggestionSink struct {
@@ -36,48 +36,42 @@ func (s *InMemorySuggestionSink) GetSuggestions() []Suggestion {
 	return append([]Suggestion(nil), s.suggestions...)
 }
 
-func StartAnalyzer(ctx context.Context, resources *[]models.CloudResource, mutex *sync.RWMutex, sink SuggestionSink, interval time.Duration) {
+func (s *InMemorySuggestionSink) ClearSuggestions() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.suggestions = []Suggestion{}
+	return nil
+}
+
+func AnalyzeResource(usage float64, resource models.CloudResource, sink SuggestionSink) {
 	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				mutex.RLock()
-				for _, res := range *resources {
-					switch r := res.(type) {
-					case *models.VM:
-						if r.CPUUsage < 10.0 {
-							sink.AddSuggestion(Suggestion{
-								ResourceID:   r.ID,
-								ResourceType: "VM",
-								Message:      "Underutilized VM (CPU < 10%)",
-								Timestamp:    time.Now(),
-							})
-						}
-					case *models.Storage:
-						if time.Since(time.Unix(r.LastAccessed, 0)) > 30*24*time.Hour {
-							sink.AddSuggestion(Suggestion{
-								ResourceID:   r.ID,
-								ResourceType: "Storage",
-								Message:      "Idle storage volume (LastAccessed > 30d)",
-								Timestamp:    time.Now(),
-							})
-						}
-					case *models.Database:
-						if r.Connections > 100 {
-							sink.AddSuggestion(Suggestion{
-								ResourceID:   r.ID,
-								ResourceType: "Database",
-								Message:      "Over-provisioned database (Connections > 100)",
-								Timestamp:    time.Now(),
-							})
-						}
-					}
-				}
-				mutex.RUnlock()
+		switch r := resource.(type) {	
+		case *models.VM:
+			if r.GetUsage() < 100.0 {
+				sink.AddSuggestion(Suggestion{
+					ResourceID:   r.GetId(),
+					ResourceType: "VM",
+					Message:      "Underutilized VM (CPU < 100%)",
+					Timestamp:    time.Now(),
+				})
+			}
+		case *models.Storage:
+			if true {
+				sink.AddSuggestion(Suggestion{
+					ResourceID:   r.ID,
+					ResourceType: "Storage",
+					Message:      "Idle storage volume (LastAccessed > 0d)",
+					Timestamp:    time.Now(),
+				})
+			}
+		case *models.Database:
+			if true {
+				sink.AddSuggestion(Suggestion{
+					ResourceID:   r.ID,
+					ResourceType: "Database",
+					Message:      "Over-provisioned database (Connections > 0)",
+					Timestamp:    time.Now(),
+				})
 			}
 		}
 	}()

@@ -3,13 +3,14 @@ package analyzer
 import (
 	"context"
 	"encoding/json"
-	"github.com/go-redis/redis/v8"
+	"fmt"
 	"time"
+	"github.com/go-redis/redis/v8"
 )
 
 type RedisSuggestionSink struct {
 	Client *redis.Client
-	Key    string // e.g. "suggestions"
+	Key    string
 }
 
 func NewRedisSuggestionSink(client *redis.Client, key string) *RedisSuggestionSink {
@@ -19,6 +20,11 @@ func NewRedisSuggestionSink(client *redis.Client, key string) *RedisSuggestionSi
 func (r *RedisSuggestionSink) AddSuggestion(sug Suggestion) {
 	ctx := context.Background()
 	b, _ := json.Marshal(sug)
+
+	fmt.Println("redisSuggestionSink : " , r.Client)
+	fmt.Println("suggestion : ", string(b))
+	// Ensure the key is initialized as an empty array if it does not exist
+	_, _ = r.Client.Do(ctx, "JSON.SET", r.Key, ".", "[]").Result()
 	_, _ = r.Client.Do(ctx, "JSON.ARRAPPEND", r.Key, ".", string(b)).Result()
 }
 

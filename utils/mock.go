@@ -3,12 +3,12 @@ package utils
 import (
 	"context"
 	"github.com/chanducheryala/cloud-resource/internal/models"
+	"github.com/chanducheryala/cloud-resource/internal/analyzer"
 	"go.uber.org/zap"
-	"sync"
 	"time"
 )
 
-func StartSimulation(ctx context.Context, resources []models.CloudResource, interval time.Duration, out chan models.CloudResource, mutex *sync.RWMutex, logger *zap.Logger) {
+func StartSimulation(ctx context.Context, resources []models.CloudResource, interval time.Duration, out chan models.CloudResource, logger *zap.Logger, suggestionSink analyzer.SuggestionSink) {
 	for _, resource := range resources {
 		go func(res models.CloudResource) {
 			for {
@@ -17,8 +17,7 @@ func StartSimulation(ctx context.Context, resources []models.CloudResource, inte
 					return
 				default:
 					res.UpdateUsage()
-					mutex.Lock()
-					mutex.Unlock()
+					analyzer.AnalyzeResource(res.GetUsage(), res, suggestionSink)
 					logger.Info("Resource state", zap.String("resource", resourceToString(res)))
 					out <- res
 					time.Sleep(interval)
